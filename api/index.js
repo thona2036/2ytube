@@ -56,7 +56,7 @@ app.get('/api/info', async (req, res) => {
   }
 });
 
-// Endpoint 2: Direct File Download Stream (MP4 / MP3)
+// Endpoint 2: Direct File Download Stream / Redirect (MP4 / MP3)
 app.get('/api/download', async (req, res) => {
   try {
     const videoUrl = req.query.url || req.query.id;
@@ -70,28 +70,32 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    const info = await ytdl.getInfo(fullUrl);
-    const cleanTitle = info.videoDetails.title.replace(/[^a-zA-Z0-9 _-]/g, '');
+    // 1. Try ytdl-core direct format extraction
+    try {
+      const info = await ytdl.getInfo(fullUrl);
+      let targetFormat;
 
-    if (isAudio) {
-      // Audio MP3 Download Stream
-      res.header('Content-Disposition', `attachment; filename="${cleanTitle}.mp3"`);
-      res.header('Content-Type', 'audio/mpeg');
-      ytdl(fullUrl, {
-        filter: 'audioonly',
-        quality: 'highestaudio'
-      }).pipe(res);
-    } else {
-      // Video MP4 Download Stream
-      res.header('Content-Disposition', `attachment; filename="${cleanTitle}_${quality}p.mp4"`);
-      res.header('Content-Type', 'video/mp4');
-      ytdl(fullUrl, {
-        filter: (format) => format.container === 'mp4' && format.hasVideo && format.hasAudio,
-        quality: quality === '1080' ? 'highestvideo' : 'highest'
-      }).pipe(res);
+      if (isAudio) {
+        targetFormat = ytdl.chooseFormat(info.formats, { filter: 'audioonly', quality: 'highestaudio' });
+      } else {
+        targetFormat = ytdl.chooseFormat(info.formats, {
+          filter: (f) => f.container === 'mp4' && f.hasVideo && f.hasAudio
+        });
+      }
+
+      if (targetFormat && targetFormat.url) {
+        return res.redirect(302, targetFormat.url);
+      }
+    } catch (e) {
+      console.log('ytdl.getInfo fallback triggered...');
     }
+
+    // 2. High-speed direct fallback stream URL
+    const fallbackUrl = `https://inv.tux.pizza/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}&local=true`;
+    return res.redirect(302, fallbackUrl);
+
   } catch (err) {
-    console.error('Error streaming download:', err.message);
+    console.error('Error processing download:', err.message);
     res.status(500).send('Failed to process download stream');
   }
 });
