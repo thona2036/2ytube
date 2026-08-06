@@ -53,7 +53,7 @@ app.get('/api/info', async (req, res) => {
   }
 });
 
-// Endpoint 2: Fail-Safe Direct Media Stream / Download Redirect (NO DNS ERRORS)
+// Endpoint 2: 100% Direct Raw File Stream (NO savefrom.net, NO y2mate, NO website redirects)
 app.get('/api/download', async (req, res) => {
   try {
     const videoUrl = req.query.url || req.query.id;
@@ -67,36 +67,49 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try Piped direct stream
+    // 1. Try Piped API for raw direct media stream (.mp4 / .mp3)
     try {
       const pipedRes = await fetch(`https://api.piped.video/streams/${ytId}`);
       if (pipedRes.ok) {
-        const pipedData = await pipedRes.json();
+        const data = await pipedRes.json();
         let stream;
-        if (isAudio && pipedData.audioStreams && pipedData.audioStreams.length > 0) {
-          stream = pipedData.audioStreams[0];
-        } else if (pipedData.videoStreams) {
-          stream = pipedData.videoStreams.find(s => s.quality === `${quality}p` && s.format === 'MPEG-4') || pipedData.videoStreams.find(s => s.format === 'MPEG-4');
+        if (isAudio && data.audioStreams && data.audioStreams.length > 0) {
+          stream = data.audioStreams[0];
+        } else if (data.videoStreams) {
+          stream = data.videoStreams.find(s => s.quality === `${quality}p` && s.format === 'MPEG-4') || data.videoStreams.find(s => s.format === 'MPEG-4');
         }
         if (stream && stream.url) {
           return res.redirect(302, stream.url);
         }
       }
     } catch(e) {
-      console.log('Piped stream fallback triggered...');
+      console.log('Piped raw stream fallback...');
     }
 
-    // 2. High-speed 100% unblocked download server (SaveFrom HD / Loader.to)
-    if (isAudio) {
-      return res.redirect(302, `https://loader.to/api/card/?url=${encodeURIComponent(fullUrl)}&f=mp3`);
-    } else {
-      return res.redirect(302, `https://ssyoutube.com/watch?v=${ytId}`);
+    // 2. Try Cobalt API for direct raw media file
+    try {
+      const cobRes = await fetch('https://api.cobalt.tools/', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: fullUrl, videoQuality: quality, isAudioOnly: isAudio })
+      });
+      if (cobRes.ok) {
+        const cobData = await cobRes.json();
+        if (cobData && cobData.url) {
+          return res.redirect(302, cobData.url);
+        }
+      }
+    } catch(e) {
+      console.log('Cobalt raw stream fallback...');
     }
+
+    // 3. Raw Direct Media Proxy Stream (Direct file download link, NO external website)
+    const rawMediaStream = `https://invidious.nerdvpn.de/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}&local=true`;
+    return res.redirect(302, rawMediaStream);
 
   } catch (err) {
     console.error('Error processing download stream:', err.message);
-    const ytId = getYoutubeId(req.query.url || req.query.id);
-    return res.redirect(302, `https://ssyoutube.com/watch?v=${ytId || ''}`);
+    res.status(500).send('Direct download stream error');
   }
 });
 
