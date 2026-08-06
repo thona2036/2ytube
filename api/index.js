@@ -90,8 +90,8 @@ app.get('/api/download', async (req, res) => {
       console.log('ytdl.getInfo fallback triggered...');
     }
 
-    // 2. High-speed direct fallback stream URL
-    const fallbackUrl = `https://inv.tux.pizza/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}&local=true`;
+    // 2. High-speed direct fallback stream URL (yewtu.be reliable online stream)
+    const fallbackUrl = `https://yewtu.be/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}`;
     return res.redirect(302, fallbackUrl);
 
   } catch (err) {
