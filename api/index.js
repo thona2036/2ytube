@@ -67,48 +67,31 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try Yewtu.be Invidious API for direct Google Video stream
+    // 1. Try Invidious DRGNS API for direct Google CDN URL (googlevideo.com)
     try {
-      const yewRes = await fetch(`https://yewtu.be/api/v1/videos/${ytId}`, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-      });
-      if (yewRes.ok) {
-        const yewData = await yewRes.json();
+      const drgnsRes = await fetch(`https://invidious.drgns.space/api/v1/videos/${ytId}`);
+      if (drgnsRes.ok) {
+        const drgnsData = await drgnsRes.json();
         let stream;
-        if (isAudio && yewData.adaptiveFormats) {
-          stream = yewData.adaptiveFormats.find(f => f.type && f.type.includes('audio'));
-        } else if (yewData.formatStreams && yewData.formatStreams.length > 0) {
-          stream = yewData.formatStreams.find(f => f.qualityLabel && f.qualityLabel.includes(quality)) ||
-                   yewData.formatStreams.find(f => f.qualityLabel && f.qualityLabel.includes('720')) ||
-                   yewData.formatStreams[0];
+        if (isAudio && drgnsData.adaptiveFormats) {
+          stream = drgnsData.adaptiveFormats.find(f => f.type && f.type.includes('audio'));
+        } else if (drgnsData.formatStreams && drgnsData.formatStreams.length > 0) {
+          stream = drgnsData.formatStreams.find(f => f.qualityLabel && f.qualityLabel.includes(quality)) || drgnsData.formatStreams[0];
         }
-        if (stream && stream.url) {
+        if (stream && stream.url && stream.url.includes('googlevideo.com')) {
           return res.redirect(302, stream.url);
         }
       }
     } catch(e) {}
 
-    // 2. Try Cobalt API instances
-    const cobInstances = [
-      'https://api.cobalt.tools/',
-      'https://co.wuk.sh/api/json',
-      'https://cobalt.api.sc7.io/'
-    ];
-
-    for (const host of cobInstances) {
+    // 2. Try Cobalt API instances for raw direct download URL
+    const cobHosts = ['https://api.cobalt.tools/', 'https://co.wuk.sh/api/json', 'https://cobalt.api.sc7.io/'];
+    for (const host of cobHosts) {
       try {
         const cobRes = await fetch(host, {
           method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-          },
-          body: JSON.stringify({
-            url: fullUrl,
-            downloadMode: isAudio ? 'audio' : 'auto',
-            videoQuality: quality
-          })
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+          body: JSON.stringify({ url: fullUrl, downloadMode: isAudio ? 'audio' : 'auto', videoQuality: quality })
         });
         if (cobRes.ok) {
           const cobData = await cobRes.json();
@@ -119,8 +102,8 @@ app.get('/api/download', async (req, res) => {
       } catch(e) {}
     }
 
-    // 3. Fallback direct yewtu.be stream redirect
-    return res.redirect(302, `https://yewtu.be/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}`);
+    // 3. Fallback direct stream link via DRGNS
+    return res.redirect(302, `https://invidious.drgns.space/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}`);
 
   } catch (err) {
     console.error('Error processing download stream:', err.message);
