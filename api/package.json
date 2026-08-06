@@ -1,0 +1,15 @@
+{
+  "name": "y2tube-api",
+  "version": "1.0.0",
+  "description": "Custom YouTube Video & Audio Downloader API for Y2Tube Blogger Template",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "dependencies": {
+    "@distube/ytdl-core": "^4.15.9",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
