@@ -56,7 +56,7 @@ app.get('/api/info', async (req, res) => {
   }
 });
 
-// Endpoint 2: Direct File Download Stream / Redirect (MP4 / MP3)
+// Endpoint 2: Direct Google CDN File Download (NO Cloudflare / NO Bot Verification)
 app.get('/api/download', async (req, res) => {
   try {
     const videoUrl = req.query.url || req.query.id;
@@ -70,7 +70,7 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try ytdl-core direct format extraction
+    // 1. Direct Google Video CDN stream extraction (No Cloudflare protection!)
     try {
       const info = await ytdl.getInfo(fullUrl);
       let targetFormat;
@@ -81,18 +81,34 @@ app.get('/api/download', async (req, res) => {
         targetFormat = ytdl.chooseFormat(info.formats, {
           filter: (f) => f.container === 'mp4' && f.hasVideo && f.hasAudio
         });
+        if (!targetFormat) {
+          targetFormat = ytdl.chooseFormat(info.formats, { filter: (f) => f.hasVideo && f.hasAudio });
+        }
       }
 
       if (targetFormat && targetFormat.url) {
         return res.redirect(302, targetFormat.url);
       }
     } catch (e) {
-      console.log('ytdl.getInfo fallback triggered...');
+      console.log('ytdl.getInfo direct stream fallback triggered...');
     }
 
-    // 2. High-speed direct fallback stream URL (yewtu.be reliable online stream)
-    const fallbackUrl = `https://yewtu.be/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}`;
-    return res.redirect(302, fallbackUrl);
+    // 2. Direct Cobalt API fallback (No Cloudflare verification screen)
+    try {
+      const cobaltRes = await fetch('https://api.cobalt.tools/', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: fullUrl, videoQuality: quality, isAudioOnly: isAudio })
+      });
+      const cobaltJson = await cobaltRes.json();
+      if (cobaltJson && cobaltJson.url) {
+        return res.redirect(302, cobaltJson.url);
+      }
+    } catch(errCobalt) {
+      console.log('Cobalt fallback failed:', errCobalt.message);
+    }
+
+    return res.status(500).send('Download stream currently unavailable. Please try again.');
 
   } catch (err) {
     console.error('Error processing download:', err.message);
