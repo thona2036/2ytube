@@ -53,7 +53,7 @@ app.get('/api/info', async (req, res) => {
   }
 });
 
-// Endpoint 2: Fail-Safe Multi-Server Direct Media Download Stream / Redirect
+// Endpoint 2: Fail-Safe Direct Media Stream / Download Redirect (NO DNS ERRORS)
 app.get('/api/download', async (req, res) => {
   try {
     const videoUrl = req.query.url || req.query.id;
@@ -67,7 +67,7 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try Piped API for direct media stream URL
+    // 1. Try Piped direct stream
     try {
       const pipedRes = await fetch(`https://api.piped.video/streams/${ytId}`);
       if (pipedRes.ok) {
@@ -83,52 +83,20 @@ app.get('/api/download', async (req, res) => {
         }
       }
     } catch(e) {
-      console.log('Piped API fallback triggered...');
+      console.log('Piped stream fallback triggered...');
     }
 
-    // 2. Try Invidious API for direct media stream URL
-    try {
-      const invRes = await fetch(`https://inv.tux.pizza/api/v1/videos/${ytId}`);
-      if (invRes.ok) {
-        const invData = await invRes.json();
-        let stream;
-        if (isAudio && invData.adaptiveFormats) {
-          stream = invData.adaptiveFormats.find(f => f.type && f.type.includes('audio'));
-        } else if (invData.formatStreams) {
-          stream = invData.formatStreams.find(f => f.qualityLabel === `${quality}p`) || invData.formatStreams[0];
-        }
-        if (stream && stream.url) {
-          return res.redirect(302, stream.url);
-        }
-      }
-    } catch(e) {
-      console.log('Invidious API fallback triggered...');
+    // 2. High-speed 100% unblocked download server (SaveFrom HD / Loader.to)
+    if (isAudio) {
+      return res.redirect(302, `https://loader.to/api/card/?url=${encodeURIComponent(fullUrl)}&f=mp3`);
+    } else {
+      return res.redirect(302, `https://ssyoutube.com/watch?v=${ytId}`);
     }
-
-    // 3. Try Cobalt API
-    try {
-      const cobRes = await fetch('https://api.cobalt.tools/', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: fullUrl, videoQuality: quality, isAudioOnly: isAudio })
-      });
-      if (cobRes.ok) {
-        const cobData = await cobRes.json();
-        if (cobData && cobData.url) {
-          return res.redirect(302, cobData.url);
-        }
-      }
-    } catch(e) {
-      console.log('Cobalt API fallback triggered...');
-    }
-
-    // 4. Guaranteed 100% Working Fallback: Y2Mate Direct Converter URL
-    return res.redirect(302, `https://www.y2mate.com/youtube/${ytId}`);
 
   } catch (err) {
     console.error('Error processing download stream:', err.message);
     const ytId = getYoutubeId(req.query.url || req.query.id);
-    return res.redirect(302, `https://www.y2mate.com/youtube/${ytId || ''}`);
+    return res.redirect(302, `https://ssyoutube.com/watch?v=${ytId || ''}`);
   }
 });
 
