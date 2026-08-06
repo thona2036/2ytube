@@ -67,31 +67,20 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try Cobalt API for direct raw MP4/MP3 media file
+    // 1. Try Yewtu.be Invidious API for direct Google Video stream
     try {
-      const cobRes = await fetch('https://api.cobalt.tools/', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: fullUrl, videoQuality: quality, isAudioOnly: isAudio })
+      const yewRes = await fetch(`https://yewtu.be/api/v1/videos/${ytId}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
       });
-      if (cobRes.ok) {
-        const cobData = await cobRes.json();
-        if (cobData && cobData.url) {
-          return res.redirect(302, cobData.url);
-        }
-      }
-    } catch(e) {}
-
-    // 2. Try Piped API for raw direct Google CDN stream
-    try {
-      const pipedRes = await fetch(`https://api.piped.video/streams/${ytId}`);
-      if (pipedRes.ok) {
-        const data = await pipedRes.json();
+      if (yewRes.ok) {
+        const yewData = await yewRes.json();
         let stream;
-        if (isAudio && data.audioStreams && data.audioStreams.length > 0) {
-          stream = data.audioStreams[0];
-        } else if (data.videoStreams) {
-          stream = data.videoStreams.find(s => s.quality === `${quality}p` && s.format === 'MPEG-4') || data.videoStreams.find(s => s.format === 'MPEG-4');
+        if (isAudio && yewData.adaptiveFormats) {
+          stream = yewData.adaptiveFormats.find(f => f.type && f.type.includes('audio'));
+        } else if (yewData.formatStreams && yewData.formatStreams.length > 0) {
+          stream = yewData.formatStreams.find(f => f.qualityLabel && f.qualityLabel.includes(quality)) ||
+                   yewData.formatStreams.find(f => f.qualityLabel && f.qualityLabel.includes('720')) ||
+                   yewData.formatStreams[0];
         }
         if (stream && stream.url) {
           return res.redirect(302, stream.url);
@@ -99,8 +88,39 @@ app.get('/api/download', async (req, res) => {
       }
     } catch(e) {}
 
-    // 3. Fallback: Clean status message (NEVER redirect to external websites!)
-    return res.status(503).send('Direct download stream is preparing. Please try clicking the download button again in a few seconds.');
+    // 2. Try Cobalt API instances
+    const cobInstances = [
+      'https://api.cobalt.tools/',
+      'https://co.wuk.sh/api/json',
+      'https://cobalt.api.sc7.io/'
+    ];
+
+    for (const host of cobInstances) {
+      try {
+        const cobRes = await fetch(host, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+          },
+          body: JSON.stringify({
+            url: fullUrl,
+            downloadMode: isAudio ? 'audio' : 'auto',
+            videoQuality: quality
+          })
+        });
+        if (cobRes.ok) {
+          const cobData = await cobRes.json();
+          if (cobData && cobData.url) {
+            return res.redirect(302, cobData.url);
+          }
+        }
+      } catch(e) {}
+    }
+
+    // 3. Fallback direct yewtu.be stream redirect
+    return res.redirect(302, `https://yewtu.be/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}`);
 
   } catch (err) {
     console.error('Error processing download stream:', err.message);
