@@ -53,7 +53,7 @@ app.get('/api/info', async (req, res) => {
   }
 });
 
-// Endpoint 2: 100% Direct Raw File Stream (NO savefrom.net, NO y2mate, NO website redirects)
+// Endpoint 2: 100% PURE DIRECT MEDIA STREAM (ZERO EXTERNAL WEBSITES, ZERO REDIRECTS)
 app.get('/api/download', async (req, res) => {
   try {
     const videoUrl = req.query.url || req.query.id;
@@ -67,7 +67,22 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try Piped API for raw direct media stream (.mp4 / .mp3)
+    // 1. Try Cobalt API for direct raw MP4/MP3 media file
+    try {
+      const cobRes = await fetch('https://api.cobalt.tools/', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: fullUrl, videoQuality: quality, isAudioOnly: isAudio })
+      });
+      if (cobRes.ok) {
+        const cobData = await cobRes.json();
+        if (cobData && cobData.url) {
+          return res.redirect(302, cobData.url);
+        }
+      }
+    } catch(e) {}
+
+    // 2. Try Piped API for raw direct Google CDN stream
     try {
       const pipedRes = await fetch(`https://api.piped.video/streams/${ytId}`);
       if (pipedRes.ok) {
@@ -82,34 +97,14 @@ app.get('/api/download', async (req, res) => {
           return res.redirect(302, stream.url);
         }
       }
-    } catch(e) {
-      console.log('Piped raw stream fallback...');
-    }
+    } catch(e) {}
 
-    // 2. Try Cobalt API for direct raw media file
-    try {
-      const cobRes = await fetch('https://api.cobalt.tools/', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: fullUrl, videoQuality: quality, isAudioOnly: isAudio })
-      });
-      if (cobRes.ok) {
-        const cobData = await cobRes.json();
-        if (cobData && cobData.url) {
-          return res.redirect(302, cobData.url);
-        }
-      }
-    } catch(e) {
-      console.log('Cobalt raw stream fallback...');
-    }
-
-    // 3. Raw Direct Media Proxy Stream (Direct file download link, NO external website)
-    const rawMediaStream = `https://invidious.nerdvpn.de/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}&local=true`;
-    return res.redirect(302, rawMediaStream);
+    // 3. Fallback: Clean status message (NEVER redirect to external websites!)
+    return res.status(503).send('Direct download stream is preparing. Please try clicking the download button again in a few seconds.');
 
   } catch (err) {
     console.error('Error processing download stream:', err.message);
-    res.status(500).send('Direct download stream error');
+    res.status(500).send('Direct media stream error');
   }
 });
 
