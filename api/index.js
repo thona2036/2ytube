@@ -53,7 +53,7 @@ app.get('/api/info', async (req, res) => {
   }
 });
 
-// Endpoint 2: 100% PURE DIRECT GOOGLEVIDEO.COM MEDIA STREAM
+// Endpoint 2: 100% PURE DIRECT MEDIA STREAM (ZERO YEWTU.BE, ZERO AM1-PROXY)
 app.get('/api/download', async (req, res) => {
   try {
     const videoUrl = req.query.url || req.query.id;
@@ -65,7 +65,7 @@ app.get('/api/download', async (req, res) => {
     const ytId = getYoutubeId(videoUrl) || videoUrl;
     const fullUrl = `https://www.youtube.com/watch?v=${ytId}`;
 
-    // 1. Try Cobalt API instances for raw direct stream URL
+    // 1. Try Cobalt API instances for direct media stream URL
     const cobHosts = [
       'https://api.cobalt.tools/',
       'https://co.wuk.sh/api/json',
@@ -97,14 +97,15 @@ app.get('/api/download', async (req, res) => {
       } catch(e) {}
     }
 
-    // 2. Query Piped Private Coffee stream API for direct stream URL
+    // 2. Query Piped Private Coffee stream API for direct googlevideo.com URL
     try {
       const pipedRes = await fetch(`https://api.piped.private.coffee/streams/${ytId}`);
       if (pipedRes.ok) {
         const pipedData = await pipedRes.json();
         const streams = isAudio ? pipedData.audioStreams : pipedData.videoStreams;
         if (streams && streams.length > 0) {
-          const directItem = streams.find(s => s.url && s.quality && s.quality.includes(quality)) || streams[0];
+          const directItem = streams.find(s => s.url && s.url.includes('googlevideo.com') && s.quality && s.quality.includes(quality)) ||
+                             streams.find(s => s.url && s.url.includes('googlevideo.com'));
           if (directItem && directItem.url) {
             return res.redirect(302, directItem.url);
           }
@@ -112,14 +113,15 @@ app.get('/api/download', async (req, res) => {
       }
     } catch(e) {}
 
-    // 3. Query Yewtube API for direct stream URL
+    // 3. Query Invidious DRGNS API for direct googlevideo.com URL
     try {
-      const yewRes = await fetch(`https://yewtu.be/api/v1/videos/${ytId}`);
-      if (yewRes.ok) {
-        const yewData = await yewRes.json();
-        const formats = isAudio ? yewData.adaptiveFormats : yewData.formatStreams;
+      const drgnsRes = await fetch(`https://invidious.drgns.space/api/v1/videos/${ytId}`);
+      if (drgnsRes.ok) {
+        const drgnsData = await drgnsRes.json();
+        const formats = isAudio ? drgnsData.adaptiveFormats : drgnsData.formatStreams;
         if (formats && formats.length > 0) {
-          const directItem = formats.find(f => f.url && f.qualityLabel && f.qualityLabel.includes(quality)) || formats[0];
+          const directItem = formats.find(f => f.url && f.url.includes('googlevideo.com') && f.qualityLabel && f.qualityLabel.includes(quality)) ||
+                             formats.find(f => f.url && f.url.includes('googlevideo.com'));
           if (directItem && directItem.url) {
             return res.redirect(302, directItem.url);
           }
@@ -127,8 +129,7 @@ app.get('/api/download', async (req, res) => {
       }
     } catch(e) {}
 
-    // 4. Fallback direct stream redirect
-    return res.redirect(302, `https://yewtu.be/latest_version?id=${ytId}&itag=${isAudio ? '140' : (quality === '1080' ? '22' : '18')}`);
+    return res.status(503).send('Direct Google Video stream is processing. Please try clicking download again.');
 
   } catch (err) {
     console.error('Error processing download stream:', err.message);
